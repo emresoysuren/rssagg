@@ -1,0 +1,11 @@
+# executable
+*.exe
+
+# vscode related
+.vscode/
+
+# private
+.env 
+
+# vendor
+vendor/
