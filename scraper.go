@@ -2,11 +2,14 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/emresoysuren/rssagg/internal/database"
+	"github.com/google/uuid"
 )
 
 func startScraping(
@@ -54,7 +57,36 @@ func scrapeFeed(db *database.Queries, wg *sync.WaitGroup, feed database.Feed) {
 	}
 
 	for _, item := range rssFeed.Channel.Item {
-		log.Println("Found post", item.Title, "on feed", feed.Name)
+		pubDate, err := time.Parse(time.RFC1123Z, item.PubDate)
+		if err != nil {
+			log.Printf("Couldn't parse date %s with err %v:", item.PubDate, err)
+			continue
+		}
+
+		description := sql.NullString{
+			String: item.Description,
+			Valid:  item.Description != "",
+		}
+
+		_, err = db.CreatePost(
+			context.Background(),
+			database.CreatePostParams{
+				ID:          uuid.New(),
+				CreatedAt:   time.Now().UTC(),
+				UpdatedAt:   time.Now().UTC(),
+				Title:       item.Title,
+				Description: description,
+				Url:         item.Link,
+				PublishedAt: pubDate,
+				FeedID:      feed.ID,
+			},
+		)
+		if err != nil {
+			if !strings.Contains(err.Error(), "duplicate key") {
+				log.Println("Failed to create post:", err)
+			}
+			continue
+		}
 	}
 	log.Printf("Feed %s collected, %d post found", feed.Name, len(rssFeed.Channel.Item))
 }
